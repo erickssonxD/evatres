@@ -4,4 +4,6 @@
     <string name="text_edit_place">¿En que lugar estás?</string>
     <string name="update_location">Actualizar ubicación</string>
     <string name="take_picture_button_text">Tomar fotografía</string>
+    <string name="pictures_taken_headline">Fotografía tomadas:</string>
+    <string name="text_location_is">La ubicación es: lat: %1$s y long: %2$s</string>
 </resources>

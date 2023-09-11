@@ -3,4 +3,6 @@
     <string name="text_edit_place">Where are you?</string>
     <string name="update_location">Update Location</string>
     <string name="take_picture_button_text">Take Picture</string>
+    <string name="pictures_taken_headline">Pictures taken</string>
+    <string name="text_location_is">Your location is: lat: %1$s y long: %2$s</string>
 </resources>

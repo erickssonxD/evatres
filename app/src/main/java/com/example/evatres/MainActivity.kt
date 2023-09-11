@@ -72,26 +72,24 @@ enum class Screen {
 }
 
 class MainActivity : ComponentActivity() {
-    val cameraAppVm: CameraAppViewModel by viewModels()
-    lateinit var cameraController: LifecycleCameraController
+    private val cameraAppVm: CameraAppViewModel by viewModels()
+    private lateinit var cameraController: LifecycleCameraController
 
-    val permissionsLauncher =
+    private val permissionsLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             when {
                 (it[permission.ACCESS_FINE_LOCATION]
                     ?: false) or (it[permission.ACCESS_COARSE_LOCATION]
                     ?: false) -> {
-                    Log.v("callback RequestMultiplePermissions", "location permissions granted")
                     cameraAppVm.onLocationPermissionsGranted()
                 }
 
                 (it[permission.CAMERA] ?: false) -> {
-                    Log.v("callback RequestMultiplePermissions", "camera permissions granted")
                     cameraAppVm.onCameraPermissionsGranted()
                 }
 
                 else -> {
-                    Log.v("RequestMultiplePermissions", "One or permissions were not granted")
+
                 }
             }
         }
@@ -120,25 +118,25 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-fun generarNombreSegunFechaHastaSegundo(): String =
+fun dateNameForPicture(): String =
     LocalDateTime.now().toString().replace(Regex("[T:.-]"), "").substring(0, 14)
 
-fun crearArchivoImagenPrivado(ctx: Context): File = File(
+fun pictureImageFile(ctx: Context): File = File(
     ctx.getExternalFilesDir(
         Environment.DIRECTORY_PICTURES
-    ), "${generarNombreSegunFechaHastaSegundo()}.jpg"
+    ), "${dateNameForPicture()}.jpg"
 )
 
 fun uri2imageBitmap(uri: Uri, ctx: Context) =
     BitmapFactory.decodeStream(ctx.contentResolver.openInputStream(uri)).asImageBitmap()
 
-fun tomarFotografia(
+fun takePicture(
     cameraController: CameraController,
-    archivo: File,
+    file: File,
     ctx: Context,
-    imagenGuardadaOk: (uri: Uri) -> Unit
+    onPictureTakenOk: (uri: Uri) -> Unit
 ) {
-    val outputFileOptions = ImageCapture.OutputFileOptions.Builder(archivo).build()
+    val outputFileOptions = ImageCapture.OutputFileOptions.Builder(file).build()
     cameraController.takePicture(
         outputFileOptions,
         ContextCompat.getMainExecutor(ctx),
@@ -146,34 +144,33 @@ fun tomarFotografia(
             ImageCapture.OnImageSavedCallback {
             override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                 outputFileResults.savedUri?.also {
-                    Log.v("tomarFotografia()::onImageSaved", "Foto guardada en ${it.toString()}")
-                    imagenGuardadaOk(it)
+                    onPictureTakenOk(it)
                 }
             }
 
             override fun onError(exception: ImageCaptureException) {
-                Log.e("tomarFotografia()", "Error: ${exception.message}")
+                Log.e("", "Error: ${exception.message}")
             }
         })
 }
 
-class SinPermisoException(mensaje: String) : Exception(mensaje)
+class NoPermissionsException(message: String) : Exception(message)
 
-fun getUbicacion(ctx: Context, onUbicacionOk: (location: Location) -> Unit): Unit {
+fun getLocation(ctx: Context, onLocationPermissionsOk: (location: Location) -> Unit) {
     try {
-        val servicio = LocationServices.getFusedLocationProviderClient(ctx)
-        val tarea = servicio.getCurrentLocation(
+        val service = LocationServices.getFusedLocationProviderClient(ctx)
+        val task = service.getCurrentLocation(
             Priority.PRIORITY_HIGH_ACCURACY,
             null
         )
-        tarea.addOnSuccessListener { onUbicacionOk(it) }
+        task.addOnSuccessListener { onLocationPermissionsOk(it) }
     } catch (e: SecurityException) {
-        throw SinPermisoException(e.message ?: "No tiene permisos para conseguir la ubicación")
+        throw NoPermissionsException(e.message ?: "You don't have location permissions")
     }
 }
 
 @Composable
-fun MainActivityUI(cameraController: CameraController, modifier: Modifier = Modifier) {
+fun MainActivityUI(cameraController: CameraController) {
     val ctx = LocalContext.current
     val formReceptionVm: FormResultViewModel = viewModel()
     val cameraAppViewModel: CameraAppViewModel = viewModel()
@@ -181,15 +178,15 @@ fun MainActivityUI(cameraController: CameraController, modifier: Modifier = Modi
         Screen.Form -> {
             FormUI(
                 formReceptionVm,
-                tomarFotoOnClick = {
+                takePictureButtonOnClick = {
                     cameraAppViewModel.changeToPictureScreen()
                     cameraAppViewModel.permissionsLauncher?.launch(
                         arrayOf(permission.CAMERA)
                     )
                 },
-                actualizarUbicacionOnClick = {
+                buttonUpdateLocationOnClick = {
                     cameraAppViewModel.onLocationPermissionsGranted = {
-                        getUbicacion(ctx) {
+                        getLocation(ctx) {
                             formReceptionVm.lat.value = it.latitude
                             formReceptionVm.long.value = it.longitude
                         }
@@ -225,8 +222,8 @@ fun MainActivityUI(cameraController: CameraController, modifier: Modifier = Modi
 @Composable
 fun FormUI(
     formReceptionVm: FormResultViewModel,
-    tomarFotoOnClick: () -> Unit = {},
-    actualizarUbicacionOnClick: () -> Unit = {},
+    takePictureButtonOnClick: () -> Unit = {},
+    buttonUpdateLocationOnClick: () -> Unit = {},
     pictureOnClick: (Uri) -> Unit = {}
 ) {
     val ctx = LocalContext.current
@@ -242,10 +239,10 @@ fun FormUI(
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp)
         )
-        Text("Fotografía de la recepción de la encomienda:")
+        Text(stringResource(R.string.pictures_taken_headline))
         Button(
             onClick =
-            { tomarFotoOnClick() }
+            { takePictureButtonOnClick() }
         ) { Text(stringResource(R.string.take_picture_button_text)) }
 
 
@@ -265,9 +262,14 @@ fun FormUI(
                 }
             })
         }
-        Text("La ubicación es: lat: ${formReceptionVm.lat.value} y long: ${formReceptionVm.long.value}")
+        Text(
+            stringResource(
+                R.string.text_location_is,
+                formReceptionVm.lat.value,
+                formReceptionVm.long.value
+            ))
         Button(onClick =
-        { actualizarUbicacionOnClick() }) { Text(stringResource(R.string.update_location)) }
+        { buttonUpdateLocationOnClick() }) { Text(stringResource(R.string.update_location)) }
         Spacer(
             Modifier.height(
                 100.dp
@@ -293,9 +295,9 @@ fun PictureCaptureUI(
         Button(
             modifier = Modifier.align(Alignment.BottomCenter),
             onClick = {
-                tomarFotografia(
+                takePicture(
                     cameraController,
-                    crearArchivoImagenPrivado(ctx),
+                    pictureImageFile(ctx),
                     ctx
                 ) {
                     formReceptionVm.pictureReceptionList.add(it)
@@ -342,7 +344,6 @@ fun MapOsmUI(latitud: Double, longitud: Double) {
     val ctx = LocalContext.current
     AndroidView(factory = {
         MapView(it).also {
-            it
             it.setTileSource(TileSourceFactory.MAPNIK)
             Configuration.getInstance().userAgentValue =
                 ctx.packageName
@@ -353,12 +354,12 @@ fun MapOsmUI(latitud: Double, longitud: Double) {
         it.controller.setZoom(18.0)
         val geoPoint = GeoPoint(latitud, longitud)
         it.controller.animateTo(geoPoint)
-        val marcador = Marker(it)
-        marcador.position = geoPoint
-        marcador.setAnchor(
+        val marker = Marker(it)
+        marker.position = geoPoint
+        marker.setAnchor(
             Marker.ANCHOR_CENTER,
             Marker.ANCHOR_CENTER
         )
-        it.overlays.add(marcador)
+        it.overlays.add(marker)
     })
 }
