@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -19,6 +20,7 @@ import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -27,7 +29,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -37,6 +38,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -64,7 +66,8 @@ import java.time.LocalDateTime
 
 enum class Screen {
     Form,
-    Picture
+    PictureCapture,
+    PictureFullscreen
 }
 
 class MainActivity : ComponentActivity() {
@@ -119,25 +122,25 @@ class MainActivity : ComponentActivity() {
 fun generarNombreSegunFechaHastaSegundo(): String =
     LocalDateTime.now().toString().replace(Regex("[T:.-]"), "").substring(0, 14)
 
-fun crearArchivoImagenPrivado(contexto: Context): File = File(
-    contexto.getExternalFilesDir(
+fun crearArchivoImagenPrivado(ctx: Context): File = File(
+    ctx.getExternalFilesDir(
         Environment.DIRECTORY_PICTURES
     ), "${generarNombreSegunFechaHastaSegundo()}.jpg"
 )
 
-fun uri2imageBitmap(uri: Uri, contexto: Context) =
-    BitmapFactory.decodeStream(contexto.contentResolver.openInputStream(uri)).asImageBitmap()
+fun uri2imageBitmap(uri: Uri, ctx: Context) =
+    BitmapFactory.decodeStream(ctx.contentResolver.openInputStream(uri)).asImageBitmap()
 
 fun tomarFotografia(
     cameraController: CameraController,
     archivo: File,
-    contexto: Context,
+    ctx: Context,
     imagenGuardadaOk: (uri: Uri) -> Unit
 ) {
     val outputFileOptions = ImageCapture.OutputFileOptions.Builder(archivo).build()
     cameraController.takePicture(
         outputFileOptions,
-        ContextCompat.getMainExecutor(contexto),
+        ContextCompat.getMainExecutor(ctx),
         object :
             ImageCapture.OnImageSavedCallback {
             override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
@@ -155,9 +158,9 @@ fun tomarFotografia(
 
 class SinPermisoException(mensaje: String) : Exception(mensaje)
 
-fun getUbicacion(contexto: Context, onUbicacionOk: (location: Location) -> Unit): Unit {
+fun getUbicacion(ctx: Context, onUbicacionOk: (location: Location) -> Unit): Unit {
     try {
-        val servicio = LocationServices.getFusedLocationProviderClient(contexto)
+        val servicio = LocationServices.getFusedLocationProviderClient(ctx)
         val tarea = servicio.getCurrentLocation(
             Priority.PRIORITY_HIGH_ACCURACY,
             null
@@ -170,13 +173,13 @@ fun getUbicacion(contexto: Context, onUbicacionOk: (location: Location) -> Unit)
 
 @Composable
 fun MainActivityUI(cameraController: CameraController, modifier: Modifier = Modifier) {
-    val contexto = LocalContext.current
-    val formRecepcionVm: FormResultViewModel = viewModel()
+    val ctx = LocalContext.current
+    val formReceptionVm: FormResultViewModel = viewModel()
     val cameraAppViewModel: CameraAppViewModel = viewModel()
     when (cameraAppViewModel.screen.value) {
         Screen.Form -> {
             FormUI(
-                formRecepcionVm,
+                formReceptionVm,
                 tomarFotoOnClick = {
                     cameraAppViewModel.changeToPictureScreen()
                     cameraAppViewModel.permissionsLauncher?.launch(
@@ -185,9 +188,9 @@ fun MainActivityUI(cameraController: CameraController, modifier: Modifier = Modi
                 },
                 actualizarUbicacionOnClick = {
                     cameraAppViewModel.onLocationPermissionsGranted = {
-                        getUbicacion(contexto) {
-                            formRecepcionVm.lat.value = it.latitude
-                            formRecepcionVm.long.value = it.longitude
+                        getUbicacion(ctx) {
+                            formReceptionVm.lat.value = it.latitude
+                            formReceptionVm.long.value = it.longitude
                         }
                     }
                     cameraAppViewModel.permissionsLauncher?.launch(
@@ -196,16 +199,24 @@ fun MainActivityUI(cameraController: CameraController, modifier: Modifier = Modi
                             permission.ACCESS_COARSE_LOCATION
                         )
                     )
+                },
+                pictureOnClick = {
+                    cameraAppViewModel.currentFullscreenPicture.value = it
+                    cameraAppViewModel.changeToPictureFullScreen()
                 })
         }
 
-        Screen.Picture -> {
-            PictureUI(formRecepcionVm, cameraAppViewModel, cameraController)
+        Screen.PictureCapture -> {
+            PictureUI(formReceptionVm, cameraAppViewModel, cameraController)
         }
 
-        else -> {
-            Log.v("AppUI()", "when else, no debería entrar aquí")
+        Screen.PictureFullscreen -> {
+            FullscreenPictureUI(cameraAppViewModel.currentFullscreenPicture.value)
         }
+    }
+
+    BackHandler {
+        cameraAppViewModel.changeToFormScreen()
     }
 }
 
@@ -214,9 +225,10 @@ fun MainActivityUI(cameraController: CameraController, modifier: Modifier = Modi
 fun FormUI(
     formReceptionVm: FormResultViewModel,
     tomarFotoOnClick: () -> Unit = {},
-    actualizarUbicacionOnClick: () -> Unit = {}
+    actualizarUbicacionOnClick: () -> Unit = {},
+    pictureOnClick: (Uri) -> Unit = {}
 ) {
-    val contexto = LocalContext.current
+    val ctx = LocalContext.current
     Column(
         modifier =
         Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally
@@ -236,16 +248,20 @@ fun FormUI(
 
         LazyRow {
             items(items = formReceptionVm.pictureReceptionList, itemContent = { item ->
-                Box(Modifier.size(200.dp, 100.dp)) {
+                Box(
+                    Modifier
+                        .clickable(true) { pictureOnClick(item!!) }
+                        .size(200.dp, 100.dp)) {
                     Image(
-                        painter = BitmapPainter(uri2imageBitmap(item!!, contexto)),
-                        contentDescription = "im")
+                        painter = BitmapPainter(uri2imageBitmap(item!!, ctx)),
+                        contentDescription = "image uri: $item"
+                    )
                 }
             })
         }
         Text("La ubicación es: lat: ${formReceptionVm.lat.value} y long: ${formReceptionVm.long.value}")
         Button(onClick =
-        { actualizarUbicacionOnClick() }) { Text("Actualizar Ubicación") }
+        { actualizarUbicacionOnClick() }) { Text(stringResource(R.string.update_location)) }
         Spacer(
             Modifier.height(
                 100.dp
@@ -280,6 +296,19 @@ fun PictureUI(
         },
         modifier = Modifier
     ) { Text("Tomar foto") }
+}
+
+@Composable
+fun FullscreenPictureUI(
+    uri: Uri,
+) {
+    val ctx = LocalContext.current
+    Box(Modifier.size(200.dp, 100.dp)) {
+        Image(
+            painter = BitmapPainter(uri2imageBitmap(uri, ctx)),
+            contentDescription = "image uri: $uri"
+        )
+    }
 }
 
 @Preview

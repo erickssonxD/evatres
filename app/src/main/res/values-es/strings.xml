@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">Evatres</string>
     <string name="text_edit_place">¿En que lugar estás?</string>
+    <string name="update_location">Actualizar ubicación</string>
 </resources>
