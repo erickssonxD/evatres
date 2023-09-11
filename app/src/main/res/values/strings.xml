@@ -1,5 +1,6 @@
 <resources>
     <string name="app_name">Evatres</string>
     <string name="text_edit_place">Where are you?</string>
-    <string name="update_location">Actualizar Ubicación</string>
+    <string name="update_location">Update Location</string>
+    <string name="take_picture_button_text">Take Picture</string>
 </resources>

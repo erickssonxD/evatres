@@ -38,11 +38,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
@@ -207,7 +208,7 @@ fun MainActivityUI(cameraController: CameraController, modifier: Modifier = Modi
         }
 
         Screen.PictureCapture -> {
-            PictureUI(formReceptionVm, cameraAppViewModel, cameraController)
+            PictureCaptureUI(formReceptionVm, cameraAppViewModel, cameraController)
         }
 
         Screen.PictureFullscreen -> {
@@ -242,17 +243,22 @@ fun FormUI(
                 .padding(horizontal = 10.dp)
         )
         Text("Fotografía de la recepción de la encomienda:")
-        Button(onClick =
-        { tomarFotoOnClick() }) { Text("Tomar Fotografía") }
+        Button(
+            onClick =
+            { tomarFotoOnClick() }
+        ) { Text(stringResource(R.string.take_picture_button_text)) }
 
 
-        LazyRow {
+        LazyRow() {
             items(items = formReceptionVm.pictureReceptionList, itemContent = { item ->
                 Box(
                     Modifier
                         .clickable(true) { pictureOnClick(item!!) }
-                        .size(200.dp, 100.dp)) {
+                        .size(100.dp, 200.dp)
+                        .rotate(90f)
+                ) {
                     Image(
+                        modifier = Modifier.fillMaxSize(),
                         painter = BitmapPainter(uri2imageBitmap(item!!, ctx)),
                         contentDescription = "image uri: $item"
                     )
@@ -272,30 +278,32 @@ fun FormUI(
 }
 
 @Composable
-fun PictureUI(
+fun PictureCaptureUI(
     formReceptionVm: FormResultViewModel,
     appViewModel: CameraAppViewModel,
     cameraController: CameraController
 ) {
     val ctx = LocalContext.current
-    AndroidView(
-        factory =
-        { PreviewView(it).apply { controller = cameraController } },
-        modifier = Modifier.fillMaxSize()
-    )
-    Button(
-        onClick = {
-            tomarFotografia(
-                cameraController,
-                crearArchivoImagenPrivado(ctx),
-                ctx
-            ) {
-                formReceptionVm.pictureReceptionList.add(it)
-                appViewModel.changeToFormScreen()
-            }
-        },
-        modifier = Modifier
-    ) { Text("Tomar foto") }
+    Box(modifier = Modifier.fillMaxSize()) {
+        AndroidView(
+            factory =
+            { PreviewView(it).apply { controller = cameraController } },
+            modifier = Modifier.fillMaxSize()
+        )
+        Button(
+            modifier = Modifier.align(Alignment.BottomCenter),
+            onClick = {
+                tomarFotografia(
+                    cameraController,
+                    crearArchivoImagenPrivado(ctx),
+                    ctx
+                ) {
+                    formReceptionVm.pictureReceptionList.add(it)
+                    appViewModel.changeToFormScreen()
+                }
+            },
+        ) { Text(stringResource(R.string.take_picture_button_text)) }
+    }
 }
 
 @Composable
@@ -303,8 +311,13 @@ fun FullscreenPictureUI(
     uri: Uri,
 ) {
     val ctx = LocalContext.current
-    Box(Modifier.size(200.dp, 100.dp)) {
+    Box(modifier = Modifier.fillMaxSize()) {
         Image(
+            modifier = Modifier
+                .fillMaxSize()
+                .rotate(90f)
+                .fillMaxSize(),
+            contentScale = ContentScale.Crop,
             painter = BitmapPainter(uri2imageBitmap(uri, ctx)),
             contentDescription = "image uri: $uri"
         )
@@ -317,7 +330,7 @@ fun TakePictureUIPreview() {
     val cameraController = LifecycleCameraController(LocalContext.current)
     cameraController.bindToLifecycle(LocalLifecycleOwner.current)
     cameraController.cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-    PictureUI(
+    PictureCaptureUI(
         formReceptionVm = FormResultViewModel(),
         appViewModel = CameraAppViewModel(),
         cameraController = cameraController

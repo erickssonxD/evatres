@@ -3,4 +3,5 @@
     <string name="app_name">Evatres</string>
     <string name="text_edit_place">¿En que lugar estás?</string>
     <string name="update_location">Actualizar ubicación</string>
+    <string name="take_picture_button_text">Tomar fotografía</string>
 </resources>
